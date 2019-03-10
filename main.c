@@ -1,52 +1,80 @@
-#include <stdio.h>
-#include <omp.h>
-#include <time.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<omp.h>
+#include<time.h>
 
-#define NUM_THREADS 4
+#define NUM_OF_THREADS 4
 
-static long long num_steps = 1000;
-double step;
+int arraySize = 1000;
 
-double dur(double start, double finish);
+int *arrA;
+int *arrB;
+int *arrC;
+
+int *init(int size) {
+    int *arr = malloc(sizeof(int) * size * size);
+    return arr;
+}
+
+int *randoms(int size) {
+    int *arr = init(size);
+    for (int i = 0; i < size * size; i++) {
+        arr[i] = rand() % 100;
+    }
+    return arr;
+}
+
+int *zeros(int size) {
+    int *arr = init(size);
+    for (int i = 0; i < size * size; i++) {
+        arr[i] = rand() % 100;
+    }
+    return arr;
+}
+
+double dur(clock_t start, clock_t finish) {
+    return ((double) (finish - start) / CLOCKS_PER_SEC);
+}
 
 int main() {
-    step = 1.0 / (double) num_steps;
+    arrA = randoms(arraySize);
+    arrB = randoms(arraySize);
+    arrC = zeros(arraySize);
 
-    omp_set_num_threads(NUM_THREADS);
+    clock_t sStart, sFinish, pStart, pFinish;
 
-    double pStart, pFinish, sStart, sFinish;
-
-    double parallelPi = 0;
-    double serialPi = 0;
-    double x = 0;
-
-    pStart = omp_get_wtime();
-#pragma omp parallel for private(x) reduction(+:parallelPi)
-    for (long long i = 0; i < num_steps; i++){
-        x = (i + 0.5) * step;
-        parallelPi += 4.0 / (1.0 + x * x);
+    //serial
+    sStart = clock();
+    for (int i = 0; i < arraySize; i++) {
+        for (int j = 0; j < arraySize; j++) {
+            int sum = 0;
+            for (int k = 0; k < arraySize; k++) {
+                sum += arrA[arraySize * i + k] * arrB[arraySize * k + j];
+            }
+            arrC[arraySize * i + j] = sum;
+        }
     }
+    sFinish = clock();
 
-    parallelPi *= step;
+    //paralel
+    omp_set_num_threads(NUM_OF_THREADS);
+    pStart = clock();
 
-    pFinish = omp_get_wtime();
-
-
-    sStart = omp_get_wtime();
-    for (int i = 0; i < num_steps; i++) {
-        x = (i + 0.5) * step;
-        serialPi += 4.0/(1.0 + x * x);
+#pragma omp parallel for
+    for (int i = 0; i < arraySize; i++) {
+        for (int j = 0; j < arraySize; j++) {
+            int sum = 0;
+            for (int k = 0; k < arraySize; k++) {
+                sum += arrA[arraySize * i + k] * arrB[arraySize * k + j];
+            }
+            arrC[arraySize * i + j] = sum;
+        }
     }
+    pFinish = clock();
 
-    serialPi *= step;
+    printf("Serial time = %f\n", dur(sStart, sFinish));
+    printf("Paralel time = %f\n", dur(pStart, pFinish));
 
-    sFinish = omp_get_wtime();
-
-    printf("Parallel PI = %.10f\nTime = %.10fs\n\n", parallelPi, dur(pStart, pFinish));
-    printf("Serial PI = %.10f\nTime = %.10fs\n", serialPi, dur(sStart, sFinish));
-
+    return 0;
 }
 
-double dur(double start, double finish) {
-    return ((finish-start));
-}

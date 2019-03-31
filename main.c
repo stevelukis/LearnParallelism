@@ -1,60 +1,103 @@
 #include <omp.h>
 #include <stdio.h>
+#include <malloc.h>
+#include <stdlib.h>
 
 #define NUM_OF_THREADS 4
+#define ARRAY_SIZE 100000
 
-static long num_steps = 100000000;
+int* arrayA;
+int* arrayC;
 
 double dur(double start, double finish) {
     return finish - start;
 }
 
+int *init(int size) {
+    int *arr = malloc(sizeof(int) * size);
+    return arr;
+}
+
+int *randoms(int size) {
+    int *arr = init(size);
+    for (int i = 0; i < size; i++) {
+        arr[i] = rand() % 100;
+    }
+    return arr;
+}
+
+void loop3(int start, int end) {
+    int numOfItem = end - start;
+    if (numOfItem > 10) {
+        numOfItem /= 2;
+        loop3(start, start + numOfItem);
+        loop3(start + numOfItem, end);
+        return;
+    }
+
+    for (int i = start; i < end; i++) {
+        arrayC[i] = 100 * arrayA[i];
+    }
+}
+
+void loop2(int start, int end) {
+    int numOfItem = end - start;
+    if (numOfItem > 10) {
+        numOfItem /= 2;
+#pragma omp task
+        loop3(start, start + numOfItem);
+#pragma omp task
+        loop3(start + numOfItem, end);
+#pragma omp taskwait
+        return;
+    }
+
+    for (int i = start; i < end; i++) {
+        arrayC[i] = 100 * arrayA[i];
+    }
+}
+
+void loop(int start, int end) {
+    int numOfItem = end - start;
+    if (numOfItem > 10) {
+        numOfItem /= 2;
+#pragma omp task
+        loop2(start, start + numOfItem);
+#pragma omp task
+        loop2(start + numOfItem, end);
+#pragma omp taskwait
+        return;
+    }
+
+    for (int i = start; i < end; i++) {
+        arrayC[i] = 100 * arrayA[i];
+    }
+}
+
 int main() {
-    double x, step, sum, sPi, pPi, oPi;
-    step = 1.0 / (double) num_steps;
+    arrayA = randoms(ARRAY_SIZE);
+    arrayC = init(ARRAY_SIZE);
 
     double sStart, sFinish, pStart, pFinish, oStart, oFinish;
 
-    //serial
     sStart = omp_get_wtime();
-    for (long i = 0; i < num_steps; i++) {
-        x = (i + 0.5) * step;
-        sum = sum + 4.0 / (1.0 + x * x);
-    }
-    sPi = step * sum;
+    loop(0, ARRAY_SIZE);
     sFinish = omp_get_wtime();
 
-
-    //Parallel
-    sum = 0;
-    omp_set_num_threads(NUM_OF_THREADS);
     pStart = omp_get_wtime();
-#pragma omp parallel
+#pragma omp parallel num_threads(NUM_OF_THREADS)
     {
-        double x;
-#pragma omp for reduction(+:sum)
-        for (long i = 0; i < num_steps; i++) {
-            x = (i + 0.5) * step;
-            sum = sum + 4.0 / (1.0 + x * x);
-        }
-    }
-    pPi = step * sum;
+#pragma omp single
+        loop(0, ARRAY_SIZE);
+    };
     pFinish = omp_get_wtime();
 
-    //P(1)
-    sum = 0;
-    omp_set_num_threads(1);
     oStart = omp_get_wtime();
-#pragma omp parallel
+#pragma omp parallel num_threads(1)
     {
-        double x;
-#pragma omp for reduction(+:sum)
-        for (long i = 0; i < num_steps; i++) {
-            x = (i + 0.5) * step;
-            sum = sum + 4.0 / (1.0 + x * x);
-        }
-    }
-    pPi = step * sum;
+#pragma omp single
+        loop(0, ARRAY_SIZE);
+    };
     oFinish = omp_get_wtime();
 
     double serialTime = dur(sStart, sFinish);
@@ -71,5 +114,4 @@ int main() {
     printf("Overhead = %fs\n", parallelOneTime - serialTime);
     printf("Speedup = %fx\n", speedUp);
     printf("Efficiency = %f%\n", efficiency);
-
 }

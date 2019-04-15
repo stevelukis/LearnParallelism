@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #define NUM_OF_THREADS 4
-#define ARRAY_SIZE 100000
+#define ARRAY_SIZE 1000000
 
 int* arrayA;
 int* arrayC;
@@ -26,51 +26,21 @@ int *randoms(int size) {
     return arr;
 }
 
-void loop3(int start, int end) {
-    int numOfItem = end - start;
-    if (numOfItem > 10) {
-        numOfItem /= 2;
-        loop3(start, start + numOfItem);
-        loop3(start + numOfItem, end);
-        return;
-    }
-
-    for (int i = start; i < end; i++) {
-        arrayC[i] = 100 * arrayA[i];
+void serial_for(int a, int b) {
+    for (int i = a; i < b; i++) {
+        arrayC[i] = arrayA[i] * 100;
     }
 }
 
-void loop2(int start, int end) {
-    int numOfItem = end - start;
-    if (numOfItem > 10) {
-        numOfItem /= 2;
+void par_for(int a, int b, int grain_size) {
+    if (a + grain_size >= b) {
+        serial_for(a, b);
+    } else {
 #pragma omp task
-        loop3(start, start + numOfItem);
+        par_for(a, (a+b)/2, grain_size);
 #pragma omp task
-        loop3(start + numOfItem, end);
+        par_for((a+b)/2, b, grain_size);
 #pragma omp taskwait
-        return;
-    }
-
-    for (int i = start; i < end; i++) {
-        arrayC[i] = 100 * arrayA[i];
-    }
-}
-
-void loop(int start, int end) {
-    int numOfItem = end - start;
-    if (numOfItem > 10) {
-        numOfItem /= 2;
-#pragma omp task
-        loop2(start, start + numOfItem);
-#pragma omp task
-        loop2(start + numOfItem, end);
-#pragma omp taskwait
-        return;
-    }
-
-    for (int i = start; i < end; i++) {
-        arrayC[i] = 100 * arrayA[i];
     }
 }
 
@@ -83,6 +53,8 @@ int main() {
     sStart = omp_get_wtime();
     loop(0, ARRAY_SIZE);
     sFinish = omp_get_wtime();
+
+    omp_set_num_threads(NUM_OF_THREADS);
 
     pStart = omp_get_wtime();
 #pragma omp parallel num_threads(NUM_OF_THREADS)
@@ -107,11 +79,11 @@ int main() {
     double efficiency = speedUp / NUM_OF_THREADS * 100;
 
 
-    printf("Serial time = %fs\n", serialTime);
-    printf("Parallel time = %fs\n", parallelTime);
-    printf("Paralel(1) time = %f\n\n", parallelOneTime);
+    printf("Serial time     = %fs\n", serialTime);
+    printf("Parallel time   = %fs\n", parallelTime);
+    printf("Paralel(1) time = %fs\n\n", parallelOneTime);
 
-    printf("Overhead = %fs\n", parallelOneTime - serialTime);
-    printf("Speedup = %fx\n", speedUp);
+    printf("Overhead   = %fs\n", parallelOneTime - serialTime);
+    printf("Speedup    = %fx\n", speedUp);
     printf("Efficiency = %f%\n", efficiency);
 }
